@@ -32,6 +32,8 @@ HOLD_SECONDS       = 2.0   # 見失い後ホールドする秒数
 RETURN_DEG_PER_SEC = 15.0  # センターへ戻る速度（度/秒）
 CONF_THRESHOLD     = 0.5   # 信頼度閾値
 
+CLASS_NAMES = {0: "Corvus", 1: "Crow", 2: "Magpie"}
+
 
 # =====================
 #  PIDコントローラー
@@ -123,9 +125,55 @@ class PanTiltController:
 
 
 # =====================
+#  オーバーレイ描画
+# =====================
+def draw_overlay(cv2, frame, boxes, best_box, tx, ty, status, servo):
+    # 全検出ボックスを薄い色で描画
+    for b in boxes:
+        x1, y1, x2, y2 = [int(v) for v in b.xyxy[0].tolist()]
+        cls_id = int(b.cls[0])
+        label = "%s %.2f" % (CLASS_NAMES.get(cls_id, "?"), float(b.conf[0]))
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (100, 100, 100), 1)
+        cv2.putText(frame, label, (x1, y1 - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (100, 100, 100), 1)
+
+    # 追尾対象ボックスを緑で描画
+    if best_box is not None:
+        x1, y1, x2, y2 = [int(v) for v in best_box.xyxy[0].tolist()]
+        cls_id = int(best_box.cls[0])
+        conf   = float(best_box.conf[0])
+        label  = "%s %.2f" % (CLASS_NAMES.get(cls_id, "?"), conf)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(frame, label, (x1, y1 - 8),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
+        # ターゲット中心に十字マーク
+        cv2.drawMarker(frame, (int(tx), int(ty)), (0, 255, 0),
+                       cv2.MARKER_CROSS, 20, 2)
+
+    # 画面中心の十字
+    cx, cy = IMG_W // 2, IMG_H // 2
+    cv2.line(frame, (cx - 20, cy), (cx + 20, cy), (255, 255, 255), 1)
+    cv2.line(frame, (cx, cy - 20), (cx, cy + 20), (255, 255, 255), 1)
+
+    # デッドバンド円
+    cv2.circle(frame, (cx, cy), DEADBAND_PX, (80, 80, 80), 1)
+
+    # 状態テキスト（左上）
+    cv2.putText(frame, status, (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 200, 255), 2)
+
+    # pan/tilt角度（左下）
+    angle_text = "pan: %.1f  tilt: %.1f" % (servo.pan, servo.tilt)
+    cv2.putText(frame, angle_text, (10, IMG_H - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
+
+    return frame
+
+
+# =====================
 #  追尾メインループ
 # =====================
-def run_tracker(simulate=False):
+def run_tracker(simulate=False, no_display=False):
     import cv2
     from ultralytics import YOLO
 
@@ -145,7 +193,6 @@ def run_tracker(simulate=False):
         print("仮想ターゲットが世界座標を動き回ります（Ctrl+Cで終了）\n")
         t0 = time.time()
 
-        # シミュレーション用の検出カウンタ
         sim_consecutive = 0
         sim_last_detect = None
         prev_time = time.time()
@@ -167,7 +214,6 @@ def run_tracker(simulate=False):
                 tx = int(IMG_W / 2 + err_x)
                 ty = int(IMG_H / 2 + err_y)
 
-                # 仮想ターゲットが画面内にある場合を「検出」とみなす
                 in_frame = (0 < tx < IMG_W and 0 < ty < IMG_H)
 
                 if in_frame:
@@ -209,9 +255,11 @@ def run_tracker(simulate=False):
         cap = cv2.VideoCapture(0)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH,  IMG_W)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, IMG_H)
+        display = not no_display
         print("\n=== カメラ追尾モード開始（Ctrl+Cで終了）===")
-        print("連続%d回検出で追尾開始、見失い後%.1fs ホールド後センター復帰\n" % (
+        print("連続%d回検出で追尾開始、見失い後%.1fs ホールド後センター復帰" % (
             MIN_DETECT_FRAMES, HOLD_SECONDS))
+        print("映像表示: %s\n" % ("ON（qキーで終了）" if display else "OFF"))
 
         consecutive  = 0
         last_detect  = None
@@ -230,21 +278,21 @@ def run_tracker(simulate=False):
 
                 results = model(frame, classes=TARGET_CLASSES, conf=CONF_THRESHOLD, verbose=False)
                 boxes   = results[0].boxes
+                best_box = None
+                tx, ty   = IMG_W / 2, IMG_H / 2
 
                 if len(boxes) > 0:
-                    # 最大面積のbirdを選択
-                    best = max(boxes, key=lambda b: (b.xyxy[0][2] - b.xyxy[0][0])
-                                                   * (b.xyxy[0][3] - b.xyxy[0][1]))
-                    x1, y1, x2, y2 = best.xyxy[0].tolist()
+                    best_box = max(boxes, key=lambda b: (b.xyxy[0][2] - b.xyxy[0][0])
+                                                       * (b.xyxy[0][3] - b.xyxy[0][1]))
+                    x1, y1, x2, y2 = best_box.xyxy[0].tolist()
                     tx   = (x1 + x2) / 2
                     ty   = (y1 + y2) / 2
-                    conf = float(best.conf[0])
+                    conf = float(best_box.conf[0])
 
                     consecutive += 1
                     last_detect  = now
 
                     if consecutive >= MIN_DETECT_FRAMES:
-                        # 追尾
                         err_x = tx - IMG_W // 2
                         err_y = ty - IMG_H // 2
                         if abs(err_x) > DEADBAND_PX:
@@ -256,30 +304,40 @@ def run_tracker(simulate=False):
                         else:
                             pid_tilt.reset()
                         servo.move(servo.pan, servo.tilt)
-                        print("bird conf=%.2f  target=(%.0f,%.0f)  err=(%+.0f,%+.0f)  pan=%.1f  tilt=%.1f  [追尾中 %df]" % (
+                        status = "追尾中 %df" % consecutive
+                        print("conf=%.2f  target=(%.0f,%.0f)  err=(%+.0f,%+.0f)  pan=%.1f  tilt=%.1f  [%s]" % (
                             conf, tx, ty, tx - IMG_W//2, ty - IMG_H//2,
-                            servo.pan, servo.tilt, consecutive))
+                            servo.pan, servo.tilt, status))
                     else:
-                        print("bird conf=%.2f  [確認中 %d/%d]" % (conf, consecutive, MIN_DETECT_FRAMES))
+                        status = "確認中 %d/%d" % (consecutive, MIN_DETECT_FRAMES)
+                        print("conf=%.2f  [%s]" % (conf, status))
 
                 else:
-                    # 未検出
                     consecutive = 0
                     pid_pan.reset()
                     pid_tilt.reset()
 
                     if last_detect is None:
-                        print("[待機中]")
+                        status = "待機中"
                     elif now - last_detect < HOLD_SECONDS:
-                        print("[ホールド中 %.1f/%.1fs]" % (now - last_detect, HOLD_SECONDS))
+                        status = "ホールド中 %.1f/%.1fs" % (now - last_detect, HOLD_SECONDS)
                     else:
                         servo.return_to_center(dt)
-                        print("[センターへ戻り中] pan=%.1f  tilt=%.1f" % (servo.pan, servo.tilt))
+                        status = "センターへ戻り中"
+                    print("[%s] pan=%.1f  tilt=%.1f" % (status, servo.pan, servo.tilt))
+
+                if display:
+                    frame = draw_overlay(cv2, frame, boxes, best_box, tx, ty, status, servo)
+                    cv2.imshow("crow tracker", frame)
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        break
 
         except KeyboardInterrupt:
             pass
         finally:
             cap.release()
+            if display:
+                cv2.destroyAllWindows()
 
     servo.center()
     servo.close()
@@ -288,7 +346,9 @@ def run_tracker(simulate=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--simulate", action="store_true",
+    parser.add_argument("--simulate",   action="store_true",
                         help="カメラなしでPID動作をシミュレーション")
+    parser.add_argument("--no-display", action="store_true",
+                        help="映像ウィンドウを表示しない（SSH実行時）")
     args = parser.parse_args()
-    run_tracker(simulate=args.simulate)
+    run_tracker(simulate=args.simulate, no_display=args.no_display)
