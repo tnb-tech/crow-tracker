@@ -312,8 +312,17 @@ def run_tracker(simulate=False, no_display=False):
                         crow_boxes.append(b)
 
                 if len(crow_boxes) > 0:
-                    best_box = max(crow_boxes, key=lambda b: (b.xyxy[0][2] - b.xyxy[0][0])
-                                                       * (b.xyxy[0][3] - b.xyxy[0][1]))
+                    if tracking_locked and smooth_tx is not None:
+                        # 追尾中は「直前の位置に最も近い箱」を優先し、複数対象間のチャタリングを防ぐ
+                        def _dist2(b):
+                            bx1, by1, bx2, by2 = b.xyxy[0].tolist()
+                            cx, cy = (bx1 + bx2) / 2, (by1 + by2) / 2
+                            return (cx - smooth_tx) ** 2 + (cy - smooth_ty) ** 2
+                        best_box = min(crow_boxes, key=_dist2)
+                    else:
+                        # まだロックオンしていない時は最大の箱(最も近いカラス)を優先
+                        best_box = max(crow_boxes, key=lambda b: (b.xyxy[0][2] - b.xyxy[0][0])
+                                                           * (b.xyxy[0][3] - b.xyxy[0][1]))
                     x1, y1, x2, y2 = best_box.xyxy[0].tolist()
                     raw_tx = (x1 + x2) / 2
                     raw_ty = (y1 + y2) / 2
