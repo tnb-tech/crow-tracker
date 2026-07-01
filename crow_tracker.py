@@ -16,14 +16,14 @@ PAN_MIN,  PAN_MAX  = 0.0, 270.0
 TILT_MIN, TILT_MAX = 0.0,  98.0
 
 # --- カメラ・画像設定 ---
-IMG_W        = 640
-IMG_H        = 480
+IMG_W        = 1920
+IMG_H        = 1080
 H_FOV        = 92.0
 V_FOV        = H_FOV * (IMG_H / IMG_W)
 DEG_PER_PX_X = H_FOV / IMG_W
 DEG_PER_PX_Y = V_FOV / IMG_H
 
-DEADBAND_PX = 25
+DEADBAND_PX = 75  # 640幅換算25px(約3.6°)相当をそのまま維持(25 * 1920/640)
 TARGET_CLASSES = [14]  # 暫定：汎用yolo11s.engine COCO bird(14)。カスタムモデル検証待ちの間の動作確認用
 
 # --- 検出・追尾パラメータ ---
@@ -31,6 +31,7 @@ MIN_DETECT_FRAMES  = 3     # 連続N回検出で追尾開始
 HOLD_SECONDS       = 2.0   # 見失い後ホールドする秒数
 RETURN_DEG_PER_SEC = 15.0  # センターへ戻る速度（度/秒）
 CONF_THRESHOLD     = 0.5   # 信頼度閾値
+CLS_CONF_THRESHOLD = 0.6   # 分類器(crow/not_crow)のcrow判定閾値
 
 CLASS_NAMES = {14: "bird"}
 
@@ -186,7 +187,8 @@ def run_tracker(simulate=False, no_display=False):
     pid_tilt = PIDController(kp=0.15, ki=0.001, kd=0.0, output_limit=20.0)
 
     model = YOLO("/home/tnb/yolo11s.engine", task="detect")
-    print("カスタムカラスモデルロード完了（Corvus/Crow/Magpie）")
+    cls_model = YOLO("/home/tnb/crow_cls.engine", task="classify")
+    print("検出モデル(汎用bird)+分類モデル(crow/not_crow)ロード完了")
 
     if simulate:
         print("\n=== シミュレーションモード ===")
@@ -252,7 +254,8 @@ def run_tracker(simulate=False, no_display=False):
             pass
 
     else:
-        cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture('/dev/video0')  # 整数指定だとGStreamerが選ばれFOURCC指定が無視されるためパス指定
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
         cap.set(cv2.CAP_PROP_FRAME_WIDTH,  IMG_W)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, IMG_H)
         display = not no_display
@@ -281,8 +284,21 @@ def run_tracker(simulate=False, no_display=False):
                 best_box = None
                 tx, ty   = IMG_W / 2, IMG_H / 2
 
-                if len(boxes) > 0:
-                    best_box = max(boxes, key=lambda b: (b.xyxy[0][2] - b.xyxy[0][0])
+                # --- stage2: 検出ボックスをcrop→crow/not_crow分類でフィルタ ---
+                crow_boxes = []
+                for b in boxes:
+                    bx1, by1, bx2, by2 = [int(v) for v in b.xyxy[0].tolist()]
+                    bx1, by1 = max(0, bx1), max(0, by1)
+                    bx2, by2 = min(IMG_W, bx2), min(IMG_H, by2)
+                    if bx2 - bx1 < 10 or by2 - by1 < 10:
+                        continue
+                    crop = frame[by1:by2, bx1:bx2]
+                    cls_r = cls_model.predict(crop, verbose=False)[0]
+                    if cls_r.names[cls_r.probs.top1] == "crow" and float(cls_r.probs.top1conf) >= CLS_CONF_THRESHOLD:
+                        crow_boxes.append(b)
+
+                if len(crow_boxes) > 0:
+                    best_box = max(crow_boxes, key=lambda b: (b.xyxy[0][2] - b.xyxy[0][0])
                                                        * (b.xyxy[0][3] - b.xyxy[0][1]))
                     x1, y1, x2, y2 = best_box.xyxy[0].tolist()
                     tx   = (x1 + x2) / 2
