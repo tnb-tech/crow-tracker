@@ -23,8 +23,8 @@ V_FOV        = H_FOV * (IMG_H / IMG_W)
 DEG_PER_PX_X = H_FOV / IMG_W
 DEG_PER_PX_Y = V_FOV / IMG_H
 
-DEADBAND_PX = 10
-TARGET_CLASSES = [0, 1, 2]  # 0:Corvus-Splendens 1:Crow 2:Magpie (sparrow除外)
+DEADBAND_PX = 25
+TARGET_CLASSES = [14]  # 暫定：汎用yolo11s.engine COCO bird(14)。カスタムモデル検証待ちの間の動作確認用
 
 # --- 検出・追尾パラメータ ---
 MIN_DETECT_FRAMES  = 3     # 連続N回検出で追尾開始
@@ -32,7 +32,7 @@ HOLD_SECONDS       = 2.0   # 見失い後ホールドする秒数
 RETURN_DEG_PER_SEC = 15.0  # センターへ戻る速度（度/秒）
 CONF_THRESHOLD     = 0.5   # 信頼度閾値
 
-CLASS_NAMES = {0: "Corvus", 1: "Crow", 2: "Magpie"}
+CLASS_NAMES = {14: "bird"}
 
 
 # =====================
@@ -182,10 +182,10 @@ def run_tracker(simulate=False, no_display=False):
     time.sleep(1.0)
     print("センター位置: pan=%.1f deg, tilt=%.1f deg" % (PAN_CENTER, TILT_CENTER))
 
-    pid_pan  = PIDController(kp=0.3, ki=0.001, kd=0.02, output_limit=30.0)
-    pid_tilt = PIDController(kp=0.3, ki=0.001, kd=0.02, output_limit=20.0)
+    pid_pan  = PIDController(kp=0.15, ki=0.001, kd=0.0, output_limit=30.0)
+    pid_tilt = PIDController(kp=0.15, ki=0.001, kd=0.0, output_limit=20.0)
 
-    model = YOLO("yolo11s_crow.engine", task="detect")
+    model = YOLO("/home/tnb/yolo11s.engine", task="detect")
     print("カスタムカラスモデルロード完了（Corvus/Crow/Magpie）")
 
     if simulate:
