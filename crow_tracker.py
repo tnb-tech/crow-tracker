@@ -140,9 +140,9 @@ def draw_overlay(cv2, frame, boxes, best_box, tx, ty, status, servo):
         x1, y1, x2, y2 = [int(v) for v in b.xyxy[0].tolist()]
         cls_id = int(b.cls[0])
         label = "%s %.2f" % (CLASS_NAMES.get(cls_id, "?"), float(b.conf[0]))
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (100, 100, 100), 1)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 1)
         cv2.putText(frame, label, (x1, y1 - 5),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (100, 100, 100), 1)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 0, 0), 1)
 
     # 追尾対象ボックスを緑で描画
     if best_box is not None:
