@@ -33,7 +33,7 @@ RETURN_DEG_PER_SEC = 15.0  # センターへ戻る速度（度/秒）
 CONF_THRESHOLD     = 0.5   # 信頼度閾値
 CLS_CONF_THRESHOLD = 0.6   # 分類器(crow/not_crow)のcrow判定閾値
 MISS_TOLERANCE     = 6     # 追尾中の一時的な見失い/誤判定を何フレームまで無視するか
-EMA_ALPHA          = 0.4   # ターゲット座標の指数移動平均の重み(小さいほど平滑化が強い)
+EMA_ALPHA          = 0.7   # ターゲット座標の指数移動平均の重み(小さいほど平滑化が強い)
 
 CLASS_NAMES = {14: "bird"}
 
