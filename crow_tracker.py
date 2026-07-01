@@ -16,14 +16,14 @@ PAN_MIN,  PAN_MAX  = 0.0, 270.0
 TILT_MIN, TILT_MAX = 0.0,  98.0
 
 # --- カメラ・画像設定 ---
-IMG_W        = 1920
-IMG_H        = 1080
+IMG_W        = 1280
+IMG_H        = 720
 H_FOV        = 92.0
 V_FOV        = H_FOV * (IMG_H / IMG_W)
 DEG_PER_PX_X = H_FOV / IMG_W
 DEG_PER_PX_Y = V_FOV / IMG_H
 
-DEADBAND_PX = 75  # 640幅換算25px(約3.6°)相当をそのまま維持(25 * 1920/640)
+DEADBAND_PX = 50  # 640幅換算25px(約3.6°)相当をそのまま維持(25 * 1280/640)
 TARGET_CLASSES = [14]  # 暫定：汎用yolo11s.engine COCO bird(14)。カスタムモデル検証待ちの間の動作確認用
 
 # --- 検出・追尾パラメータ ---
