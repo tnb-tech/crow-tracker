@@ -185,8 +185,8 @@ def run_tracker(simulate=False, no_display=False):
     time.sleep(1.0)
     print("センター位置: pan=%.1f deg, tilt=%.1f deg" % (PAN_CENTER, TILT_CENTER))
 
-    pid_pan  = PIDController(kp=0.15, ki=0.001, kd=0.0, output_limit=30.0)
-    pid_tilt = PIDController(kp=0.15, ki=0.001, kd=0.0, output_limit=20.0)
+    pid_pan  = PIDController(kp=0.10, ki=0.001, kd=0.0, output_limit=30.0)
+    pid_tilt = PIDController(kp=0.10, ki=0.001, kd=0.0, output_limit=20.0)
 
     model = YOLO("/home/tnb/yolo11s.engine", task="detect")
     cls_model = YOLO("/home/tnb/crow_cls.engine", task="classify")
