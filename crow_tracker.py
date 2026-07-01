@@ -32,6 +32,7 @@ HOLD_SECONDS       = 2.0   # 見失い後ホールドする秒数
 RETURN_DEG_PER_SEC = 15.0  # センターへ戻る速度（度/秒）
 CONF_THRESHOLD     = 0.5   # 信頼度閾値
 CLS_CONF_THRESHOLD = 0.6   # 分類器(crow/not_crow)のcrow判定閾値
+MISS_TOLERANCE     = 3     # 追尾中の一時的な見失い/誤判定を何フレームまで無視するか
 
 CLASS_NAMES = {14: "bird"}
 
@@ -264,9 +265,11 @@ def run_tracker(simulate=False, no_display=False):
             MIN_DETECT_FRAMES, HOLD_SECONDS))
         print("映像表示: %s\n" % ("ON（qキーで終了）" if display else "OFF"))
 
-        consecutive  = 0
-        last_detect  = None
-        prev_time    = time.time()
+        consecutive     = 0
+        last_detect     = None
+        tracking_locked = False
+        miss_streak     = 0
+        prev_time       = time.time()
 
         try:
             while True:
@@ -294,7 +297,11 @@ def run_tracker(simulate=False, no_display=False):
                         continue
                     crop = frame[by1:by2, bx1:bx2]
                     cls_r = cls_model.predict(crop, verbose=False)[0]
-                    if cls_r.names[cls_r.probs.top1] == "crow" and float(cls_r.probs.top1conf) >= CLS_CONF_THRESHOLD:
+                    cls_name = cls_r.names[cls_r.probs.top1]
+                    cls_conf = float(cls_r.probs.top1conf)
+                    print("  [DEBUG stage2] box=(%d,%d,%d,%d) det_conf=%.2f -> cls=%s conf=%.2f" % (
+                        bx1, by1, bx2, by2, float(b.conf[0]), cls_name, cls_conf))
+                    if cls_name == "crow" and cls_conf >= CLS_CONF_THRESHOLD:
                         crow_boxes.append(b)
 
                 if len(crow_boxes) > 0:
@@ -307,8 +314,11 @@ def run_tracker(simulate=False, no_display=False):
 
                     consecutive += 1
                     last_detect  = now
-
+                    miss_streak  = 0
                     if consecutive >= MIN_DETECT_FRAMES:
+                        tracking_locked = True
+
+                    if tracking_locked:
                         err_x = tx - IMG_W // 2
                         err_y = ty - IMG_H // 2
                         if abs(err_x) > DEADBAND_PX:
@@ -331,20 +341,30 @@ def run_tracker(simulate=False, no_display=False):
                         print("conf=%.2f  [%s]" % (conf, status))
 
                 else:
-                    consecutive = 0
-                    pid_pan.reset()
-                    pid_tilt.reset()
+                    really_lost = True
+                    if tracking_locked:
+                        miss_streak += 1
+                        if miss_streak <= MISS_TOLERANCE:
+                            really_lost = False
+                            status = "追尾中(見失い中 %d/%d)" % (miss_streak, MISS_TOLERANCE)
+                            status_en = "Tracking (miss %d/%d)" % (miss_streak, MISS_TOLERANCE)
 
-                    if last_detect is None:
-                        status = "待機中"
-                        status_en = "Waiting"
-                    elif now - last_detect < HOLD_SECONDS:
-                        status = "ホールド中 %.1f/%.1fs" % (now - last_detect, HOLD_SECONDS)
-                        status_en = "Holding %.1f/%.1fs" % (now - last_detect, HOLD_SECONDS)
-                    else:
-                        servo.return_to_center(dt)
-                        status = "センターへ戻り中"
-                        status_en = "Returning to center"
+                    if really_lost:
+                        tracking_locked = False
+                        consecutive = 0
+                        pid_pan.reset()
+                        pid_tilt.reset()
+
+                        if last_detect is None:
+                            status = "待機中"
+                            status_en = "Waiting"
+                        elif now - last_detect < HOLD_SECONDS:
+                            status = "ホールド中 %.1f/%.1fs" % (now - last_detect, HOLD_SECONDS)
+                            status_en = "Holding %.1f/%.1fs" % (now - last_detect, HOLD_SECONDS)
+                        else:
+                            servo.return_to_center(dt)
+                            status = "センターへ戻り中"
+                            status_en = "Returning to center"
                     print("[%s] pan=%.1f  tilt=%.1f" % (status, servo.pan, servo.tilt))
 
                 if display:
