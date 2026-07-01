@@ -58,10 +58,14 @@ class PIDController:
 
     def update(self, error_px, deg_per_px, now):
         error_deg = error_px * deg_per_px
-        dt = (now - self._prev_time) if self._prev_time else 0.033
-        dt = max(dt, 1e-6)
+        if self._prev_time is None:
+            # reset直後の1フレームは微分キック(0→大きな誤差の急変を誤検知)を防ぐため微分項を無効化
+            dt = 0.033
+            derivative = 0.0
+        else:
+            dt = max(now - self._prev_time, 1e-6)
+            derivative = (error_deg - self._prev_error) / dt
         self._integral += error_deg * dt
-        derivative      = (error_deg - self._prev_error) / dt
         output = (self.kp * error_deg
                 + self.ki * self._integral
                 + self.kd * derivative)
