@@ -321,11 +321,13 @@ def run_tracker(simulate=False, no_display=False):
                             pid_tilt.reset()
                         servo.move(servo.pan, servo.tilt)
                         status = "追尾中 %df" % consecutive
+                        status_en = "Tracking %df" % consecutive
                         print("conf=%.2f  target=(%.0f,%.0f)  err=(%+.0f,%+.0f)  pan=%.1f  tilt=%.1f  [%s]" % (
                             conf, tx, ty, tx - IMG_W//2, ty - IMG_H//2,
                             servo.pan, servo.tilt, status))
                     else:
                         status = "確認中 %d/%d" % (consecutive, MIN_DETECT_FRAMES)
+                        status_en = "Checking %d/%d" % (consecutive, MIN_DETECT_FRAMES)
                         print("conf=%.2f  [%s]" % (conf, status))
 
                 else:
@@ -335,15 +337,18 @@ def run_tracker(simulate=False, no_display=False):
 
                     if last_detect is None:
                         status = "待機中"
+                        status_en = "Waiting"
                     elif now - last_detect < HOLD_SECONDS:
                         status = "ホールド中 %.1f/%.1fs" % (now - last_detect, HOLD_SECONDS)
+                        status_en = "Holding %.1f/%.1fs" % (now - last_detect, HOLD_SECONDS)
                     else:
                         servo.return_to_center(dt)
                         status = "センターへ戻り中"
+                        status_en = "Returning to center"
                     print("[%s] pan=%.1f  tilt=%.1f" % (status, servo.pan, servo.tilt))
 
                 if display:
-                    frame = draw_overlay(cv2, frame, boxes, best_box, tx, ty, status, servo)
+                    frame = draw_overlay(cv2, frame, boxes, best_box, tx, ty, status_en, servo)
                     cv2.imshow("crow tracker", frame)
                     if cv2.waitKey(1) & 0xFF == ord('q'):
                         break
