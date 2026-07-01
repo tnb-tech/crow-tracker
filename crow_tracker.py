@@ -32,7 +32,7 @@ HOLD_SECONDS       = 2.0   # 見失い後ホールドする秒数
 RETURN_DEG_PER_SEC = 15.0  # センターへ戻る速度（度/秒）
 CONF_THRESHOLD     = 0.5   # 信頼度閾値
 CLS_CONF_THRESHOLD = 0.6   # 分類器(crow/not_crow)のcrow判定閾値
-MISS_TOLERANCE     = 3     # 追尾中の一時的な見失い/誤判定を何フレームまで無視するか
+MISS_TOLERANCE     = 6     # 追尾中の一時的な見失い/誤判定を何フレームまで無視するか
 
 CLASS_NAMES = {14: "bird"}
 
