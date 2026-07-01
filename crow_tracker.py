@@ -33,6 +33,7 @@ RETURN_DEG_PER_SEC = 15.0  # センターへ戻る速度（度/秒）
 CONF_THRESHOLD     = 0.5   # 信頼度閾値
 CLS_CONF_THRESHOLD = 0.6   # 分類器(crow/not_crow)のcrow判定閾値
 MISS_TOLERANCE     = 6     # 追尾中の一時的な見失い/誤判定を何フレームまで無視するか
+EMA_ALPHA          = 0.4   # ターゲット座標の指数移動平均の重み(小さいほど平滑化が強い)
 
 CLASS_NAMES = {14: "bird"}
 
@@ -269,6 +270,8 @@ def run_tracker(simulate=False, no_display=False):
         last_detect     = None
         tracking_locked = False
         miss_streak     = 0
+        smooth_tx       = None
+        smooth_ty       = None
         prev_time       = time.time()
 
         try:
@@ -308,8 +311,15 @@ def run_tracker(simulate=False, no_display=False):
                     best_box = max(crow_boxes, key=lambda b: (b.xyxy[0][2] - b.xyxy[0][0])
                                                        * (b.xyxy[0][3] - b.xyxy[0][1]))
                     x1, y1, x2, y2 = best_box.xyxy[0].tolist()
-                    tx   = (x1 + x2) / 2
-                    ty   = (y1 + y2) / 2
+                    raw_tx = (x1 + x2) / 2
+                    raw_ty = (y1 + y2) / 2
+                    if smooth_tx is None:
+                        smooth_tx, smooth_ty = raw_tx, raw_ty
+                    else:
+                        smooth_tx = EMA_ALPHA * raw_tx + (1 - EMA_ALPHA) * smooth_tx
+                        smooth_ty = EMA_ALPHA * raw_ty + (1 - EMA_ALPHA) * smooth_ty
+                    tx   = smooth_tx
+                    ty   = smooth_ty
                     conf = float(best_box.conf[0])
 
                     consecutive += 1
@@ -352,6 +362,8 @@ def run_tracker(simulate=False, no_display=False):
                     if really_lost:
                         tracking_locked = False
                         consecutive = 0
+                        smooth_tx = None
+                        smooth_ty = None
                         pid_pan.reset()
                         pid_tilt.reset()
 
